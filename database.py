@@ -1,4 +1,5 @@
 import mysql.connector
+from mysql.connector import pooling
 from mysql.connector import Error
 from log_config import logger
 
@@ -11,51 +12,56 @@ from config import (
 
 
 class Database:
-    def __init__(self):
+    def __init__(self, pool_name="mypool", pool_size=5):
         try:
-            self.connection = mysql.connector.connect(
+            self.pool = pooling.MySQLConnectionPool(
+                pool_name=pool_name,
+                pool_size=pool_size,
+                pool_reset_session=True,
                 host=DB_ENDPOINT,
+                database=DB_NAME,
                 user=DB_USERNAME,
-                password=DB_PASSWORD,
-                database=DB_NAME
+                password=DB_PASSWORD
             )
-            if self.connection.is_connected():
-                print("✅ Connected to MySQL database")
+            logger.info(f"✅ Connection pool '{pool_name}' created with size {pool_size}")
         except Error as e:
-            print(f"❌ Error while connecting to MySQL: {e}")
-            self.connection = None
+            logger.error(f"❌ Error creating connection pool: {e}")
+            self.pool = None
 
-    def insert_data(self, table, data):
-        """
-        Insert data into a table.
-        Args:
-            table (str): Table name
-            data (dict): Dictionary where keys = column names, values = column values
-        Example:
-            db.insert_data("employees", {"name": "Alice", "age": 30})
-        """
-        if self.connection is None:
-            print("❌ No database connection")
+    def insert_call(self, data):
+        if self.pool is None:
+            logger.error("❌ No connection pool available.")
             return
 
-        placeholders = ", ".join(["%s"] * len(data))
-        columns = ", ".join(data.keys())
-        values = tuple(data.values())
+        query = f"""INSERT INTO calls (db_call_id, manager_id, manager_login, manager_name, client_number, client_name, duration, answered, direction, start_time, answer_time, end_time, recording, waiting_sec)
+        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"""
 
-        query = f"INSERT INTO {table} ({columns}) VALUES ({placeholders})"
-
+        conn = None
+        cursor = None
         try:
-            cursor = self.connection.cursor()
-            cursor.execute(query, values)
-            self.connection.commit()
-            print(f"✅ Inserted into {table}: {data}")
+            conn = self.pool.get_connection()
+            cursor = conn.cursor()
+            cursor.execute(query, (
+                data["db_call_id"],
+                data["manager_id"],
+                data["manager_login"],
+                data["manager_name"],
+                data["client_number"],
+                data["client_name"],
+                data["duration"],
+                data["answered"],
+                data["direction"],
+                data["start_time"],
+                data["answer_time"],
+                data["end_time"],
+                data["recording"],
+                data["waiting_sec"]
+            ))
+            conn.commit()
         except Error as e:
-            print(f"❌ Error inserting data: {e}")
-
-    def close(self):
-        """
-        Close the database connection
-        """
-        if self.connection and self.connection.is_connected():
-            self.connection.close()
-            print("🔒 MySQL connection closed")
+            logger.error(f"❌ Error inserting data: {e}")
+        finally:
+            if cursor:
+                cursor.close()
+            if conn:
+                conn.close()
