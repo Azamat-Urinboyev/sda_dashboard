@@ -59,7 +59,6 @@ def retrieve_call_info(data):
 def get_data():
     data = request.json
     call_info = retrieve_call_info(data)
-    print(call_info)
     database.insert_call(call_info)
 
 

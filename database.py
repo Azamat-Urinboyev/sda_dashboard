@@ -65,3 +65,26 @@ class Database:
                 cursor.close()
             if conn:
                 conn.close()
+
+    def insert_attendance(self, attendance):
+        if self.pool is None:
+            logger.error("❌ No connection pool available.")
+            return
+
+        query = """INSERT INTO attendance (employee_name, work_date, check_in, check_out) VALUES (%s, %s, %s, %s)"""
+
+        conn = None
+        cursor = None
+        try:
+            conn = self.pool.get_connection()
+            cursor = conn.cursor()
+            for att in attendance:
+                cursor.execute(query, att)
+            conn.commit()
+        except Error as e:
+            logger.error(f"❌ Error inserting attendance data: {e}")
+        finally:
+            if cursor:
+                cursor.close()
+            if conn:
+                conn.close()
